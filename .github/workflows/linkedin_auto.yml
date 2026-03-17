@@ -1,0 +1,104 @@
+name: LinkedIn Automation
+on:
+  repository_dispatch:
+    types: [run-linkedin-connect, run-linkedin-message]
+  workflow_dispatch:
+
+jobs:
+  automation:
+    runs-on: ubuntu-latest
+    # Thêm quyền cho GITHUB_TOKEN để có thể xóa cache
+    permissions:
+      actions: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # 1. Khôi phục cookie từ lần chạy trước
+      - name: Restore LinkedIn Cookie
+        uses: actions/cache@v3
+        with:
+          path: linkedin_cookies.pkl
+          key: ${{ runner.os }}-linkedin-session-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-linkedin-session-
+
+      # 2. Chạy Script (Giữ nguyên logic của bạn)
+      - name: Run Connect Script
+        if: github.event.action == 'run-linkedin-connect'
+        env:
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          RANGE_NAME: ${{ secrets.RANGE_NAME }}
+          GOOGLE_APPLICATION_CRED: ${{ secrets.GOOGLE_APPLICATION_CRED }}
+          LINKEDIN_USERNAME: ${{ secrets.LINKEDIN_USERNAME }}
+          LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
+          LINKEDIN_COOKIE: ${{ secrets.LINKEDIN_COOKIE }}
+          MISSIVE_API_KEY: ${{ secrets.MISSIVE_API_KEY }}
+        run: python -c "from copy_of_connect_linkedin_with_cookie import main_connect; main_connect()"
+
+      - name: Run Message Script
+        if: github.event.action == 'run-linkedin-message'
+        env:
+          SPREADSHEET_MESS_ID: ${{ secrets.SPREADSHEET_MESS_ID }}
+          GOOGLE_APPLICATION_CRED: ${{ secrets.GOOGLE_APPLICATION_CRED }}
+          LINKEDIN_USERNAME: ${{ secrets.LINKEDIN_USERNAME }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
+          LINKEDIN_COOKIE: ${{ secrets.LINKEDIN_COOKIE }}
+          MISSIVE_API_KEY: ${{ secrets.MISSIVE_API_KEY }}
+        run: python -c "from copy_of_message_linkedin_with_cookie import main_mess; main_mess()"
+
+      # 3. Dọn dẹp Cache cũ (Chỉ giữ lại 1 cái mới nhất)
+      - name: Cleanup old caches
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Dọn dẹp các cache cũ có tiền tố ${{ runner.os }}-linkedin-session-..."
+          
+          # Lấy danh sách tất cả cache keys, trừ cái vừa tạo (run_id hiện tại)
+          # Sắp xếp theo thời gian tạo, mới nhất lên đầu
+          all_caches=$(gh cache list --limit 100 --json key,createdAt --sort created_at --order desc)
+          
+          # Lọc các key có tiền tố session nhưng KHÔNG phải của run_id hiện tại
+          current_key="${{ runner.os }}-linkedin-session-${{ github.run_id }}"
+          
+          echo "$all_caches" | jq -r '.[] | .key' | grep "${{ runner.os }}-linkedin-session-" | while read -r key; do
+            if [ "$key" != "$current_key" ]; then
+              echo "Đang xóa cache cũ: $key"
+              gh cache delete "$key" || true
+            else
+              echo "Giữ lại cache hiện tại: $key"
+            fi
+          done
+
+      # 4. Lưu lại cookie mới nhất cho lần sau
+      - name: Save LinkedIn Cookie
+        if: always()
+        uses: actions/cache@v3
+        with:
+          path: linkedin_cookies.pkl
+          key: ${{ runner.os }}-linkedin-session-${{ github.run_id }}
+
+      - name: Upload Screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linkedin-screenshots
+          path: ./*.png
+          retention-days: 2

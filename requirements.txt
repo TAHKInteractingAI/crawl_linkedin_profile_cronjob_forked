@@ -1,13 +1,10 @@
-fastapi
-uvicorn
 selenium
 webdriver-manager
 python-dotenv
 pandas
 google-api-python-client
+google-auth
 google-auth-httplib2
 google-auth-oauthlib
-Pillow
 gspread
 oauth2client
-google-genai

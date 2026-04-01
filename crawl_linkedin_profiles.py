@@ -375,31 +375,157 @@ def login_failover(driver: webdriver.Chrome):
     return False
     
 # --- 4. CRAWL PROFILE (HÀM FIX TRIỆT ĐỂ) ---
+# def crawl_profile(driver, raw_url):
+#     try:
+#         url = raw_url.strip()
+#         driver.get(url)
+
+#         print(f"--- Processing: {url}")
+#         time.sleep(random.uniform(5, 10))
+
+#         # Cuộn trang nhiều lần để kích hoạt dữ liệu ẩn
+#         for _ in range(3):
+#             driver.execute_script("window.scrollBy(0, 300);")
+#             time.sleep(1)
+
+#         if any(x in driver.current_url for x in ["login", "authwall", "checkpoint", "challenge"]):
+#             print("Debug: Auth wall detected.")
+#             # Chụp screenshot
+#             filename = f"authwall_{int(time.time())}.png"
+#             driver.save_screenshot(filename)
+#             print(f"Screenshot saved: {filename}")
+#             return None, "AUTH_WALL"
+
+#         data_js = driver.execute_script("""
+#     const getTxt = (el) => el ? el.innerText.trim() : "";
+
+#     // 1. Tìm Tên (Name): 
+#     const getElementByTextLength = (selector, maxLength) => {
+#     return [...document.querySelectorAll(selector)]
+#         .find(el => (el.innerText?.trim().length || 0) <= maxLength);
+#     };
+#     const nameElement = getElementByTextLength('a:has(h2)', 20) || getElementByTextLength('a:has(h1)', 20);
+#     const name = getTxt(nameElement);
+
+#     // 2. Tìm Title/Headline: 
+
+#     // 3. Tìm Địa điểm (Location): 
+#     // Tìm thẻ <p> có chứa dấu phẩy (thành phố, quốc gia) và không chứa các từ khóa như 'follower' hay 'connection'.
+
+#     // 4. Tìm số Connections:
+#     const keywords = ['connections', 'followers'];
+#     const connections = [...document.querySelectorAll('p')]
+#   .find(p => /connections|followers/i.test(p.innerText))
+#   ?.closest('div')?.innerText;
+
+#     // 5. Tìm Công ty (Experience):
+#   const items = document.querySelectorAll('[componentkey^="entity-collection-item"]');
+
+#   const currentCompanies = Array.from(items)
+#       .filter(item => {
+#           const text = item.innerText.toLowerCase();
+#           // Lọc các item đang làm việc hiện tại
+#           return text.includes('present') || text.includes('hiện tại');
+#       })
+#       .map(item => {
+#           // Cách 1: Ưu tiên lấy qua alt/aria-label của Logo (Chính xác 99%)
+#           const logoEl = item.querySelector('[aria-label$="logo"], img[alt$="logo"]');
+#           if (logoEl) {
+#               const labelText = logoEl.getAttribute('aria-label') || logoEl.getAttribute('alt');
+#               if (labelText) {
+#                   // Thay thế chữ " logo" ở cuối (bỏ qua hoa/thường) bằng chuỗi rỗng
+#                   return labelText.replace(/\s+logo$/i, '').trim();
+#               }
+#           }
+
+#           // Cách 2: Fallback (dự phòng) phòng trường hợp layout bị thay đổi dị thường
+#           // Lấy tất cả thẻ <p>, thường thì <p> thứ 1 là Title, <p> thứ 2 là Tên công ty
+#           const pTags = Array.from(item.querySelectorAll('p'))
+#                             .map(p => p.innerText.trim())
+#                             .filter(t => t.length > 0);
+          
+#           if (pTags.length > 1) {
+#               // Lấy thẻ <p> thứ 2 và cắt phần ' · ' nếu có
+#               return pTags[1].split(' · ')[0].trim();
+#           }
+
+#           return "";
+#       })
+#       .filter(name => name !== "");
+      
+#   return {
+#       name: name,
+#       //title: title,
+#       //location: location,
+#       connections: connections,
+#       company: currentCompanies
+#   };
+# """)
+
+#         name = data_js.get('name', '')
+#         #title = data_js.get('title', '')
+#         title_el = WebDriverWait(driver, 6).until(
+#             EC.presence_of_element_located((By.XPATH, XPATH_TITLE))
+#         )
+#         title = title_el.text.strip()
+#         #location = data_js.get('location', '')
+#         location_el = WebDriverWait(driver, 6).until(EC.presence_of_element_located((By.XPATH, XPATH_LOCATION)))
+#         location = location_el.text.strip()
+#         company = data_js.get('company', '')
+#         conn_source = data_js.get('connections', '').strip()
+#         parts = conn_source.split()
+#         clean_connection = " ".join([p for p in parts if p != '·'])
+        
+#         # # Fallback: Nếu vẫn trống công ty, thử lấy từ Title (thường sau dấu "at")
+#         # if not company and " at " in title:
+#         #     company = title.split(" at ")[-1].split("|")[0].strip()
+
+#         print(f"Debug: Extracted name: {name}")
+#         print(f"Debug: Extracted company: {company}")
+#         print(f"Debug: Extracted location: {location}")
+#         print(f"Debug: Extracted title: {title}")
+#         print(f"Debug: Extracted connections: {clean_connection}")
+
+#         # connection = ""
+#         # match = re.search(r'([\d,\.\+]+)\s*(connections|kết nối|followers|người theo dõi)', clean_connection, re.I)
+#         # if match:
+#         #     connection = match.group(0)
+
+#         #print(f"Debug: Stats - Title: {len(title)} chars, Loc: {len(location)} chars, Comp: {len(company)} chars")
+
+#         return {
+#             "Name": name, "Title": title, "Location": location, "Connection": clean_connection, "Company": company
+#         }, "Success"
+
+#     except Exception as e:
+#         print(f"Debug: Error at {url} - {str(e)}")
+#         return None, str(e)
+# --- 4. CRAWL PROFILE ---
 def crawl_profile(driver, raw_url):
     try:
         url = raw_url.strip()
         driver.get(url)
 
         print(f"--- Processing: {url}")
-        time.sleep(random.uniform(20, 35))
+        # Chờ trang tải nội dung cơ bản (chỉ 8-12s)
+        time.sleep(random.uniform(8, 12))
 
         # Cuộn trang nhiều lần để kích hoạt dữ liệu ẩn
         for _ in range(3):
             driver.execute_script("window.scrollBy(0, 300);")
-            time.sleep(1)
+            time.sleep(random.uniform(1, 2))
 
         if any(x in driver.current_url for x in ["login", "authwall", "checkpoint", "challenge"]):
             print("Debug: Auth wall detected.")
-            # Chụp screenshot
+            # Chụp screenshot lưu lại log trên GitHub Actions
             filename = f"authwall_{int(time.time())}.png"
             driver.save_screenshot(filename)
             print(f"Screenshot saved: {filename}")
             return None, "AUTH_WALL"
 
+        # Khối JavaScript trích xuất dữ liệu của bạn
         data_js = driver.execute_script("""
     const getTxt = (el) => el ? el.innerText.trim() : "";
-
-    // 1. Tìm Tên (Name): 
     const getElementByTextLength = (selector, maxLength) => {
     return [...document.querySelectorAll(selector)]
         .find(el => (el.innerText?.trim().length || 0) <= maxLength);
@@ -407,100 +533,64 @@ def crawl_profile(driver, raw_url):
     const nameElement = getElementByTextLength('a:has(h2)', 20) || getElementByTextLength('a:has(h1)', 20);
     const name = getTxt(nameElement);
 
-    // 2. Tìm Title/Headline: 
-
-    // 3. Tìm Địa điểm (Location): 
-    // Tìm thẻ <p> có chứa dấu phẩy (thành phố, quốc gia) và không chứa các từ khóa như 'follower' hay 'connection'.
-
-    // 4. Tìm số Connections:
     const keywords = ['connections', 'followers'];
     const connections = [...document.querySelectorAll('p')]
   .find(p => /connections|followers/i.test(p.innerText))
   ?.closest('div')?.innerText;
 
-    // 5. Tìm Công ty (Experience):
   const items = document.querySelectorAll('[componentkey^="entity-collection-item"]');
-
   const currentCompanies = Array.from(items)
       .filter(item => {
           const text = item.innerText.toLowerCase();
-          // Lọc các item đang làm việc hiện tại
           return text.includes('present') || text.includes('hiện tại');
       })
       .map(item => {
-          // Cách 1: Ưu tiên lấy qua alt/aria-label của Logo (Chính xác 99%)
           const logoEl = item.querySelector('[aria-label$="logo"], img[alt$="logo"]');
           if (logoEl) {
               const labelText = logoEl.getAttribute('aria-label') || logoEl.getAttribute('alt');
               if (labelText) {
-                  // Thay thế chữ " logo" ở cuối (bỏ qua hoa/thường) bằng chuỗi rỗng
                   return labelText.replace(/\s+logo$/i, '').trim();
               }
           }
-
-          // Cách 2: Fallback (dự phòng) phòng trường hợp layout bị thay đổi dị thường
-          // Lấy tất cả thẻ <p>, thường thì <p> thứ 1 là Title, <p> thứ 2 là Tên công ty
           const pTags = Array.from(item.querySelectorAll('p'))
                             .map(p => p.innerText.trim())
                             .filter(t => t.length > 0);
-          
           if (pTags.length > 1) {
-              // Lấy thẻ <p> thứ 2 và cắt phần ' · ' nếu có
               return pTags[1].split(' · ')[0].trim();
           }
-
           return "";
       })
       .filter(name => name !== "");
       
   return {
       name: name,
-      //title: title,
-      //location: location,
       connections: connections,
       company: currentCompanies
   };
 """)
 
         name = data_js.get('name', '')
-        #title = data_js.get('title', '')
+        
         title_el = WebDriverWait(driver, 6).until(
             EC.presence_of_element_located((By.XPATH, XPATH_TITLE))
         )
         title = title_el.text.strip()
-        #location = data_js.get('location', '')
+        
         location_el = WebDriverWait(driver, 6).until(EC.presence_of_element_located((By.XPATH, XPATH_LOCATION)))
         location = location_el.text.strip()
+        
         company = data_js.get('company', '')
         conn_source = data_js.get('connections', '').strip()
         parts = conn_source.split()
         clean_connection = " ".join([p for p in parts if p != '·'])
-        
-        # # Fallback: Nếu vẫn trống công ty, thử lấy từ Title (thường sau dấu "at")
-        # if not company and " at " in title:
-        #     company = title.split(" at ")[-1].split("|")[0].strip()
-
-        print(f"Debug: Extracted name: {name}")
-        print(f"Debug: Extracted company: {company}")
-        print(f"Debug: Extracted location: {location}")
-        print(f"Debug: Extracted title: {title}")
-        print(f"Debug: Extracted connections: {clean_connection}")
-
-        # connection = ""
-        # match = re.search(r'([\d,\.\+]+)\s*(connections|kết nối|followers|người theo dõi)', clean_connection, re.I)
-        # if match:
-        #     connection = match.group(0)
-
-        #print(f"Debug: Stats - Title: {len(title)} chars, Loc: {len(location)} chars, Comp: {len(company)} chars")
 
         return {
             "Name": name, "Title": title, "Location": location, "Connection": clean_connection, "Company": company
         }, "Success"
 
     except Exception as e:
-        print(f"Debug: Error at {url} - {str(e)}")
+        print(f"Debug: Lỗi trích xuất tại {url} - {str(e)}")
         return None, str(e)
-
 # --- 5. MAIN ---
 def main():
     MAX_PROFILE = 20
@@ -526,6 +616,7 @@ def main():
         if names[i] and titles[i] and locations[i] and connections[i] and companies[i]:
             continue  
         print(f"🔄 Đang xử lý: {url}")
+        
         # Trong vòng lặp for i in range(1, len(urls)) của hàm main:
         data, status = crawl_profile(driver, url)
         data_company_list = [str(i) for i in data['Company']]

@@ -1,7 +1,7 @@
 name: LinkedIn 24/7 Batch Crawler
 on:
   repository_dispatch:
-    types: [run-linkedin-connect, run-linkedin-message]
+    types: [run-linkedin-crawler-bot]
   workflow_dispatch:
 
 jobs:

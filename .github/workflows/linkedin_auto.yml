@@ -33,10 +33,12 @@ jobs:
       - name: Restore LinkedIn Cookies
         uses: actions/cache@v3
         with:
-          path: ./*.pkl
-          key: ${{ runner.os }}-linkedin-session-v2-${{ github.run_id }}
+          path: |
+            cookies_acc1.pkl
+            cookies_acc2.pkl
+          key: ${{ runner.os }}-linkedin-session-${{ github.run_id }}
           restore-keys: |
-            ${{ runner.os }}-linkedin-session-v2-
+            ${{ runner.os }}-linkedin-session
 
       # 2. Chạy Script với đầy đủ biến môi trường cho 2 tài khoản
       - name: Run Crawler
@@ -57,5 +59,15 @@ jobs:
         if: always()
         uses: actions/cache@v3
         with:
-          path: ./*.pkl
-          key: ${{ runner.os }}-linkedin-session-v2-${{ github.run_id }}
+          path: |
+            cookies_acc1.pkl
+            cookies_acc2.pkl
+          key: ${{ runner.os }}-linkedin-session-${{ github.run_id }}
+          
+      - name: Upload Screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linkedin-screenshots
+          path: ./*.png
+          retention-days: 2

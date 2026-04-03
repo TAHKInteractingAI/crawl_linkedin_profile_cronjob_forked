@@ -247,7 +247,7 @@ def login_failover(driver: webdriver.Chrome):
                     print(f"⚠️ Cookie cũ không hiệu lực. Đang xóa file {COOKIES_FILE}...")
                     os.remove(COOKIES_FILE) # Xóa ngay nếu không dùng được
             except Exception as e:
-                print(f"⚠️ Exception during cookie login for {username}: {e}")
+                print(f"⚠️ Có lõi khi dùng cookies cho  {username}: {e}")
                 try:
                     driver.save_screenshot(f"cookie_{username}_error.png")
                 except Exception:

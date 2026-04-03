@@ -541,8 +541,13 @@ def main():
         url = urls[i]
         if "linkedin.com/in/" not in url: continue
         #Nếu tất cả đã có dữ liệu thì bỏ qua
-        if names[i] and titles[i] and locations[i] and connections[i] and companies[i]:
-            continue  
+        name_val = names[i] if i < len(names) else ""
+        title_val = titles[i] if i < len(titles) else ""
+        loc_val = locations[i] if i < len(locations) else ""
+        conn_val = connections[i] if i < len(connections) else ""
+        comp_val = companies[i] if i < len(companies) else ""
+        if name_val and title_val and loc_val and conn_val and comp_val:
+            continue
         print(f"🔄 Đang xử lý: {url}")
         
         # Trong vòng lặp for i in range(1, len(urls)) của hàm main:

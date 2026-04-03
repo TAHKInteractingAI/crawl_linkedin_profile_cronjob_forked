@@ -51,7 +51,6 @@ INPUT_TAB_NAME = "Sheet1"
 MISSIVE_API_KEY = os.getenv('MISSIVE_API_KEY')
 HEADERS = {"Authorization": f"Bearer {MISSIVE_API_KEY}", "Content-Type": "application/json"}
 PARAMS = {"limit": 20, "inbox":"true"} 
-COOKIES_FILE = 'linkedin_cookies.pkl'
 CREDENTIALS_FILE = 'linkedin_credentials.pkl'
 SPREADSHEET_CRAWL_ID = os.getenv('SPREADSHEET_CRAWL_ID')
 GOOGLE_CREDS = os.getenv('GOOGLE_APPLICATION_CRED') 

@@ -33,16 +33,14 @@ jobs:
       - name: Restore LinkedIn Cookies
         uses: actions/cache@v3
         with:
-          path: |
-            cookies_acc1.pkl
-            cookies_acc2.pkl
+          path: cookies_acc*.pkl
           key: ${{ runner.os }}-linkedin-session-v2-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-linkedin-session-v2-
 
       # 2. Chạy Script với đầy đủ biến môi trường cho 2 tài khoản
       - name: Run Crawler
-        if: github.event.action == 'run-run-linkedin-crawler-bot'
+        if: github.event.action == 'run-linkedin-crawler-bot'
         env:
           SHEET_ID_OR_URL: ${{ secrets.SHEET_ID_OR_URL }}
           GOOGLE_APPLICATION_CRED: ${{ secrets.GOOGLE_APPLICATION_CRED }}
@@ -60,6 +58,5 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            cookies_acc1.pkl
-            cookies_acc2.pkl
+            cookies_acc*.pkl
           key: ${{ runner.os }}-linkedin-session-v2-${{ github.run_id }}

@@ -270,7 +270,7 @@ def login_failover(driver: webdriver.Chrome):
             # Click Login
             btn = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, XPATH_LOGIN_BUTTON)))
             btn.click()
-            
+            time.sleep(15)
             # Kiểm tra 2FA Verification
             handle_code_verification(driver)
             

@@ -33,7 +33,7 @@ jobs:
       - name: Restore LinkedIn Cookies
         uses: actions/cache@v3
         with:
-          path: cookies_acc*.pkl
+          path: ./*.pkl
           key: ${{ runner.os }}-linkedin-session-v2-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-linkedin-session-v2-
@@ -42,7 +42,7 @@ jobs:
       - name: Run Crawler
         if: github.event.action == 'run-linkedin-crawler-bot'
         env:
-          SHEET_ID_OR_URL: ${{ secrets.SHEET_ID_OR_URL }}
+          SPREADSHEET_CRAWL_ID: ${{ secrets.SPREADSHEET_CRAWL_ID }}
           GOOGLE_APPLICATION_CRED: ${{ secrets.GOOGLE_APPLICATION_CRED }}
           MISSIVE_API_KEY: ${{ secrets.MISSIVE_API_KEY }}
           # Tài khoản chính
@@ -57,6 +57,5 @@ jobs:
         if: always()
         uses: actions/cache@v3
         with:
-          path: |
-            cookies_acc*.pkl
+          path: ./*.pkl
           key: ${{ runner.os }}-linkedin-session-v2-${{ github.run_id }}

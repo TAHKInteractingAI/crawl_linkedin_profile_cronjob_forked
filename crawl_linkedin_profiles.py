@@ -8,8 +8,6 @@ from dotenv import load_dotenv
 import pandas as pd
 import requests
 
-from PIL import Image as PILImage
-
 # Selenium
 from selenium import webdriver
 from selenium.webdriver.common.by import By

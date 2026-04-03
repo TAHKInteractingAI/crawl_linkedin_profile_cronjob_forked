@@ -173,6 +173,7 @@ def handle_code_verification(driver: webdriver.Chrome):
         
         print("➡️ Phát hiện yêu cầu mã PIN. Đang lấy code...")
         code = get_missive_linkedin_code()
+        print(f"PIN: {code}")
         if code:
             verification_field.send_keys(code)
             driver.find_element(By.ID, "email-pin-submit-button").click()
@@ -238,20 +239,15 @@ def login_failover(driver: webdriver.Chrome):
                 status = check_account_status(driver)
                 if status == "LOGGED_IN":
                     print(f"✅ Login thành công bằng COOKIE cho {username}")
-                    try:
-                        driver.save_screenshot(f"cookie_login_{username}.png")
-                    except Exception:
-                        pass
+                    driver.save_screenshot(f"cookie_login_{username}.png")
                     return True
                 else:
+                    driver.save_screenshot(f"cookie_login_failed_{username}.png")
                     print(f"⚠️ Cookie cũ không hiệu lực. Đang xóa file {COOKIES_FILE}...")
                     os.remove(COOKIES_FILE) # Xóa ngay nếu không dùng được
             except Exception as e:
                 print(f"⚠️ Có lõi khi dùng cookies cho  {username}: {e}")
-                try:
-                    driver.save_screenshot(f"cookie_{username}_error.png")
-                except Exception:
-                    pass
+                driver.save_screenshot(f"cookie_login_failed_{username}.png")
                 if os.path.exists(COOKIES_FILE):
                     try:
                         os.remove(COOKIES_FILE)
@@ -288,16 +284,14 @@ def login_failover(driver: webdriver.Chrome):
                 return True
             else:
                 print(f"❌ Tài khoản {username} bị KHÓA hoặc Checkpoint. Đang đổi account...")
+                driver.save_screenshot(f"cookie_login_failed_{username}.png")
                 if os.path.exists(COOKIES_FILE):
                     os.remove(COOKIES_FILE)
                 continue # Nhảy sang loop account tiếp theo
                 
         except Exception as e:
-            print(f"❌ Lỗi login {username}: {str(e)}")
-            try:
-                driver.save_screenshot(f"manual_{username}_error.png")
-            except Exception:
-                pass
+            print(f"❌ Lỗi trong khi login thủ công {username}: {str(e)}")
+            driver.save_screenshot(f"cookie_while_login_failed_{username}.png")
             if os.path.exists(COOKIES_FILE):
                 try:
                     os.remove(COOKIES_FILE)

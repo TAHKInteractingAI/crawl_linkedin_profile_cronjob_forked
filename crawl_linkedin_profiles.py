@@ -590,3 +590,7 @@ def main():
         time.sleep(random.randint(40, 80))
 
     driver.quit()
+    
+if __name__ == "__main__":
+    main()
+    print("👌👌👌👌THỰC THI XONG CHƯƠNG TRÌNH!")

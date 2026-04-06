@@ -1,13 +1,12 @@
 import os
-import base64
 import time
 import pickle
 import random
 import json
+import PIL
 from dotenv import load_dotenv
-import pandas as pd
 import requests
-
+import re
 # Selenium
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -18,7 +17,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+import google.generativeai as genai
 
 # Google APIs / Sheets
 import gspread
@@ -52,6 +51,7 @@ PARAMS = {"limit": 20, "inbox":"true"}
 CREDENTIALS_FILE = 'linkedin_credentials.pkl'
 SPREADSHEET_CRAWL_ID = os.getenv('SPREADSHEET_CRAWL_ID')
 GOOGLE_CREDS = os.getenv('GOOGLE_APPLICATION_CRED') 
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
 ACCOUNTS = [
     {
@@ -220,6 +220,7 @@ def check_account_status(driver: webdriver.Chrome):
 def login_failover(driver: webdriver.Chrome):
     global COOKIES_FILE
     for acc in ACCOUNTS:
+        time.sleep(random.uniform(8, 10)) # Delay ngẫu nhiên trước khi thử account mới
         if not acc["user"] or not acc["pass"]:
             continue
             
@@ -301,7 +302,15 @@ def login_failover(driver: webdriver.Chrome):
 
     print("‼️ HẾT TÀI KHẢN KHẢ DỤNG. DỪNG CHƯƠNG TRÌNH.")
     return False
-    
+
+def call_gemini_with_image(image_path):
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-3-flash-preview')
+    img = PIL.Image.open(image_path)
+    response = model.generate_content(["Trích xuất ảnh và cho tôi chức vụ và tên công ty cho những mục có 'present'. Format theo JSON: '<tên công ty>', 'chức vụ':'<chức vụ>'. Response chỉ json, ngắn gọn, không thêm nội dung khác vào", img])
+    response_cleaned = re.sub(r"```json|```", "", str(response.text)).strip()
+    return response_cleaned
+
 # --- 4. CRAWL PROFILE (HÀM FIX TRIỆT ĐỂ) ---
 # def crawl_profile(driver, raw_url):
 #     try:

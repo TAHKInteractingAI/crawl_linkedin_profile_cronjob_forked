@@ -52,6 +52,7 @@ jobs:
           # Tài khoản dự phòng
           LINKEDIN_USERNAME_2: ${{ secrets.LINKEDIN_USERNAME_2 }}
           LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python crawl_linkedin_profiles.py
 
       # 3. Lưu lại các file cookie (cả cũ và mới/cập nhật) cho lần chạy sau

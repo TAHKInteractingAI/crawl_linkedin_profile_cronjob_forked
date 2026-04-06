@@ -1,10 +1,10 @@
 selenium
-webdriver-manager
 python-dotenv
-pandas
 google-api-python-client
 google-auth
 google-auth-httplib2
 google-auth-oauthlib
 gspread
-oauth2client
+google-generativeai
+re
+PIL

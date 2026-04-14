@@ -6,7 +6,6 @@ import json
 import PIL
 from dotenv import load_dotenv
 import requests
-import re
 # Selenium
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -18,13 +17,14 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.chrome.service import Service
 import google.generativeai as genai
-
+import undetected_chromedriver as uc
+from lxml import html
 # Google APIs / Sheets
 import gspread
 from google.auth import default
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
-import re
+import google.api_core.exceptions as google_exceptions
 # Guard Colab imports
 try:
     from google.colab import auth, files  # type: ignore
@@ -41,17 +41,25 @@ except Exception:
     Image = None
     display = None
 
-load_dotenv()
+load_dotenv(override=True)
 
 # --- CẤU HÌNH ---
 INPUT_TAB_NAME = "Sheet1"
 MISSIVE_API_KEY = os.getenv('MISSIVE_API_KEY')
+TARGET_URL = "https://www.linkedin.com/uas/login?session_redirect=https%3A%2F%2Fwww.linkedin.com%2Ffeed%2F"
 HEADERS = {"Authorization": f"Bearer {MISSIVE_API_KEY}", "Content-Type": "application/json"}
 PARAMS = {"limit": 20, "inbox":"true"} 
 CREDENTIALS_FILE = 'linkedin_credentials.pkl'
 SPREADSHEET_CRAWL_ID = os.getenv('SPREADSHEET_CRAWL_ID')
 GOOGLE_CREDS = os.getenv('GOOGLE_APPLICATION_CRED') 
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+GEMINI_PROMPT = """
+                From the image, extract company names and positions that are currently the user working on until present.
+                Response by giving 2 seperated lists, one for company names and one for positions. Format the list of postions with 'from'
+                Here's the example format: [<company1>, <company2>,..etc]|[<position1> from <company1>, <position2> from <company1>, <position1> from <company2>, <position2> from <company2>,..etc]
+                Response only with the lists, no additional text.
+                
+                """
 
 ACCOUNTS = [
     {
@@ -65,50 +73,107 @@ ACCOUNTS = [
         "cookie_filename": "cookies_acc2.pkl"
     }
 ]
-XPATH_USERNAME = '//*[@id="username"]'
-XPATH_PASSWORD = '//*[@id="password"]'
-XPATH_LOGIN_BUTTON = '//button[contains(@class, "btn__primary--large") and @aria-label="Sign in"]'
+XPATH_USERNAME = '//*[@id="username"]'# | //input[@id=":r3:"] | //input[contains(@id, "r")] | //input[@autocomplete="username" or @autocomplete="webauthn"]'
+XPATH_PASSWORD = '//*[@id="password"]'# | //input[@id=":r4:"] | //input[contains(@id, "r")] | //input[@autocomplete="current-password"]'
+XPATH_LOGIN_BUTTON = '//button[contains(@class, "btn__primary--large") and @aria-label="Sign in"]'# | //button[.//text()[contains(., "Sign in") or contains(., "Log in") or contains(., "Đăng nhập")]]'
+
 XPATH_LOCATION = '/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[1]/div/section/div/div/div[2]/div[1]/div[1]/div/div[2]/p[1]'
 XPATH_TITLE = '/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[1]/div/section/div/div/div[2]/div[1]/div[1]/div/p[1]'
 # --- 1. SETUP DRIVER ---
-def get_driver():
-    options = webdriver.ChromeOptions()
+# def get_driver():
+#     options = webdriver.ChromeOptions()
     
-    # 1. Định nghĩa một User-Agent nhất quán (Tránh khai báo 2 lần)
-    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    options.add_argument(f"user-agent={user_agent}")
+#     # 1. Định nghĩa một User-Agent nhất quán (Tránh khai báo 2 lần)
+#     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+#     options.add_argument(f"user-agent={user_agent}")
 
-    # 2.1 Các thiết lập cơ bản cho môi trường Linux/Docker (GitHub Actions)
+#     # 2.1 Các thiết lập cơ bản cho môi trường Linux/Docker (GitHub Actions)
+#     options.add_argument('--no-sandbox')
+#     options.add_argument("--disable-dev-shm-usage")
+#     options.add_argument('--disable-gpu')
+#     options.add_argument('--headless=new')
+#     options.add_argument("--window-size=1920,1080")
+#     options.page_load_strategy = 'eager'
+#     # 2.2 Ép trình duyệt và Header luôn yêu cầu tiếng Anh (vài text button không phải tiếng anh)
+#     options.add_argument('--lang=en-GB') 
+#     options.add_experimental_option('prefs', {'intl.accept_languages': 'en,en_GB'})
+    
+#     # 3. CHỐNG PHÁT HIỆN BOT (Stealth Mode)
+#     # Loại bỏ cờ 'nút điều khiển tự động'
+#     options.add_experimental_option("excludeSwitches", ["enable-automation"])
+#     options.add_experimental_option('useAutomationExtension', False)
+#     # Vô hiệu hóa tính năng AutomationControlled của Blink
+#     options.add_argument("--disable-blink-features=AutomationControlled")
+    
+#     # Thêm các cờ để trình duyệt giống người dùng thật hơn
+#     options.add_argument("--disable-infobars")
+#     options.add_argument("--disable-notifications")
+    
+#     # Khởi tạo driver
+#     driver = webdriver.Chrome(options=options)
+    
+#     # 4. Ẩn thuộc tính navigator.webdriver bằng Script thực thi ngay khi load trang
+#     driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+#         "source": """
+#             Object.defineProperty(navigator, 'webdriver', {
+#                 get: () => undefined
+#             })
+#         """
+#     })
+    
+#     return driver
+def get_driver():
+    options = uc.ChromeOptions()
+    
+    # 1. Cấu hình cơ bản cho môi trường Headless (GitHub Actions)
+    options.add_argument('--headless=new')
     options.add_argument('--no-sandbox')
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument('--disable-gpu')
-    options.add_argument('--headless=new')
     options.add_argument("--window-size=1920,1080")
-    options.page_load_strategy = 'eager'
-    # 2.2 Ép trình duyệt và Header luôn yêu cầu tiếng Anh (vài text button không phải tiếng anh)
-    options.add_argument('--lang=en-GB') 
-    options.add_experimental_option('prefs', {'intl.accept_languages': 'en,en_GB'})
     
-    # 3. CHỐNG PHÁT HIỆN BOT (Stealth Mode)
-    # Loại bỏ cờ 'nút điều khiển tự động'
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-    # Vô hiệu hóa tính năng AutomationControlled của Blink
-    options.add_argument("--disable-blink-features=AutomationControlled")
+    # 2. [TĂNG TỐC] Chiến lược load trang
+    # 'eager' giúp trình duyệt không chờ đợi tải xong ảnh hay script bên thứ 3
+    options.page_load_strategy = 'normal'
     
-    # Thêm các cờ để trình duyệt giống người dùng thật hơn
-    options.add_argument("--disable-infobars")
-    options.add_argument("--disable-notifications")
+    # 3. [TĂNG TỐC] Chặn tải hình ảnh, CSS và Fonts để tiết kiệm băng thông và RAM
+    prefs = {
+        "profile.managed_default_content_settings.images": 2,
+        "profile.managed_default_content_settings.stylesheets": 1,
+        "profile.managed_default_content_settings.fonts": 2
+    }
+    options.add_experimental_option("prefs", prefs)
     
-    # Khởi tạo driver
-    driver = webdriver.Chrome(options=options)
+    # 4. Ép trình duyệt dùng tiếng Anh
+    options.add_argument('--lang=en-GB')
     
-    # 4. Ẩn thuộc tính navigator.webdriver bằng Script thực thi ngay khi load trang
+    # 5. [CHỐNG PHÁT HIỆN] Thêm Proxy dân cư (Khuyến nghị)
+    # Trên GitHub Actions, hãy set secrets.PROXY_URL (ví dụ: http://user:pass@ip:port)
+    proxy_url = os.getenv("PROXY_URL")
+    if proxy_url:
+        options.add_argument(f'--proxy-server={proxy_url}')
+    
+    # Khởi tạo undetected_chromedriver (Không dùng webdriver.Chrome thông thường)
+    driver = uc.Chrome(options=options, version_main=146)
+    
+    # 6. [CHỐNG PHÁT HIỆN] Bơm thêm Stealth Script qua CDP
     driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
         "source": """
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined
-            })
+            // Ẩn webdriver
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            
+            // Fake runtime của Chrome (Bot thường không có cái này)
+            window.navigator.chrome = { runtime: {} };
+            
+            // Bơm thêm plugins giả
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5]
+            });
+            
+            // Ép ngôn ngữ
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['en-GB', 'en-US', 'en']
+            });
         """
     })
     
@@ -197,7 +262,7 @@ def get_missive_linkedin_code():
 
 def check_account_status(driver: webdriver.Chrome):
     """Kiểm tra trạng thái tài khoản một cách chính xác hơn"""
-    time.sleep(5) # Đợi một chút để trang ổn định
+    time.sleep(15) # Đợi một chút để trang ổn định
     current_url = driver.current_url
     
     # 1. Kiểm tra các URL báo khóa/chặn
@@ -234,9 +299,11 @@ def login_failover(driver: webdriver.Chrome):
         if os.path.exists(COOKIES_FILE):
             print(f"DEBUG: Nạp cookie từ {COOKIES_FILE}")
             try:
-                driver.get("https://www.linkedin.com") # Phải vào domain trước khi add cookie
+                driver.get(TARGET_URL) # Phải vào domain trước khi add cookie
                 load_cookies(driver, COOKIES_FILE)
-                driver.get("https://www.linkedin.com/feed")
+                driver.refresh()
+                time.sleep(5)
+                #driver.get("https://www.linkedin.com/feed")
                 status = check_account_status(driver)
                 if status == "LOGGED_IN":
                     print(f"✅ Login thành công bằng COOKIE cho {username}")
@@ -258,16 +325,15 @@ def login_failover(driver: webdriver.Chrome):
 
         # --- BƯỚC 2: LOGIN THỦ CÔNG ---
         print(f"DEBUG: Tiến hành Login thủ công cho {username}")
-        driver.get("https://www.linkedin.com/login")
+        driver.get(TARGET_URL)
         
         try:
-            u_field = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, XPATH_USERNAME)))
-            p_field = driver.find_element(By.XPATH, XPATH_PASSWORD)
-            
+            u_field = WebDriverWait(driver, 10).until(EC.visibility_of_element_located((By.XPATH, XPATH_USERNAME)))
             human_type(u_field, username)
-            time.sleep(1)
+            time.sleep(2)
+            p_field = WebDriverWait(driver, 10).until(EC.visibility_of_element_located((By.XPATH, XPATH_PASSWORD)))
             human_type(p_field, password)
-            
+            time.sleep(2)
             # Click Login
             btn = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, XPATH_LOGIN_BUTTON)))
             btn.click()
@@ -302,14 +368,37 @@ def login_failover(driver: webdriver.Chrome):
 
     print("‼️ HẾT TÀI KHẢN KHẢ DỤNG. DỪNG CHƯƠNG TRÌNH.")
     return False
-
-def call_gemini_with_image(image_path):
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-3-flash-preview')
+#'gemini-3-flash-preview','gemini-3.1-flash-lite-preview', 'gemini-2.5-flash-lite'
+AVAILABLE_MODELS = ['gemini-3-flash-preview','gemini-3.1-flash-lite-preview', 'gemini-2.5-flash-lite']
+def call_gemini_with_image(image_path) -> list:
     img = PIL.Image.open(image_path)
-    response = model.generate_content(["Trích xuất ảnh và cho tôi chức vụ và tên công ty cho những mục có 'present'. Format theo JSON: '<tên công ty>', 'chức vụ':'<chức vụ>'. Response chỉ json, ngắn gọn, không thêm nội dung khác vào", img])
-    response_cleaned = re.sub(r"```json|```", "", str(response.text)).strip()
-    return response_cleaned
+    genai.configure(api_key=GEMINI_API_KEY)
+    for model_name in AVAILABLE_MODELS:
+        try:
+            print(f"--- Đang thử model: {model_name} ---")
+            model = genai.GenerativeModel(model_name)
+            print(f"--- Đang sử dụng model: {model_name} ---, --- Keys: {GEMINI_API_KEY}")
+            response = model.generate_content([GEMINI_PROMPT, img]).text
+            
+            # Xử lý chuỗi trả về
+            parts = response.split('|')
+            if len(parts) < 2: continue # Nếu format sai thì thử model khác hoặc bỏ qua
+            
+            coms = parts[0].strip(' []').replace("'", "").replace('"', '')
+            poss = parts[1].strip(' []').replace("'", "").replace('"', '')
+            
+            print(f"✅ Thành công với {model_name}. Công ty: {coms}, Vị trí: {poss}")
+            return coms, poss
+
+        except google_exceptions.ResourceExhausted:
+            print(f"⚠️ Model {model_name} đã hết quota (Reached Quota).")
+            continue 
+        except Exception as e:
+            print(f"❌ Lỗi với {model_name}: {str(e)}")
+            continue
+
+    print("🛑 Tất cả model đều thất bại hoặc hết quota. Chuyển sang XPATH...")
+    return None, None
 
 # --- 4. CRAWL PROFILE (HÀM FIX TRIỆT ĐỂ) ---
 # def crawl_profile(driver, raw_url):
@@ -438,6 +527,13 @@ def call_gemini_with_image(image_path):
 #         print(f"Debug: Error at {url} - {str(e)}")
 #         return None, str(e)
 # --- 4. CRAWL PROFILE ---
+def scroll_linkedin(driver, pixels):
+    # Script này tìm khung cuộn của LinkedIn và kéo xuống
+    scroll_script = f"""
+        var container = document.querySelector('main') || document.querySelector('.scaffold-layout__main') || window;
+        container.scrollBy(0, {pixels});
+    """
+    driver.execute_script(scroll_script)
 def crawl_profile(driver, raw_url):
     try:
         url = raw_url.strip()
@@ -448,9 +544,14 @@ def crawl_profile(driver, raw_url):
         time.sleep(random.uniform(8, 12))
 
         # Cuộn trang nhiều lần để kích hoạt dữ liệu ẩn
-        for _ in range(3):
-            driver.execute_script("window.scrollBy(0, 300);")
-            time.sleep(random.uniform(1, 2))
+        scroll_linkedin(driver, 1180)
+        # action = ActionChains(driver)
+        # action.move_by_offset(500, 500).click().perform()
+        # for i in range(2):
+        #     action.send_keys(Keys.PAGE_DOWN).perform()
+        #     time.sleep(0.5)
+        time.sleep(2)
+        driver.save_screenshot(f"screenshot_temp.png")
 
         if any(x in driver.current_url for x in ["login", "authwall", "checkpoint", "challenge"]):
             print("Debug: Auth wall detected.")
@@ -462,61 +563,119 @@ def crawl_profile(driver, raw_url):
 
         # Khối JavaScript trích xuất dữ liệu của bạn
         data_js = driver.execute_script("""
-    const getTxt = (el) => el ? el.innerText.trim() : "";
-    const getElementByTextLength = (selector, maxLength) => {
-    return [...document.querySelectorAll(selector)]
+        const getTxt = (el) => el ? el.innerText.trim() : "";
+        const getElementByTextLength = (selector, maxLength) => {
+        return [...document.querySelectorAll(selector)]
         .find(el => (el.innerText?.trim().length || 0) <= maxLength);
-    };
-    const nameElement = getElementByTextLength('a:has(h2)', 20) || getElementByTextLength('a:has(h1)', 20);
-    const name = getTxt(nameElement);
+        };
+        const nameElement = getElementByTextLength('a:has(h2)', 20) || getElementByTextLength('a:has(h1)', 20);
+        const name = getTxt(nameElement);
 
-    const keywords = ['connections', 'followers'];
-    const connections = [...document.querySelectorAll('p')]
-  .find(p => /connections|followers/i.test(p.innerText))
-  ?.closest('div')?.innerText;
+        const keywords = ['connections', 'followers'];
+        const connections = [...document.querySelectorAll('p')]
+          .find(p => /connections|followers/i.test(p.innerText))
+          ?.closest('div')?.innerText;
 
-  const items = document.querySelectorAll('[componentkey^="entity-collection-item"]');
-  const currentCompanies = Array.from(items)
-      .filter(item => {
-          const text = item.innerText.toLowerCase();
-          return text.includes('present') || text.includes('hiện tại');
-      })
-      .map(item => {
-          const logoEl = item.querySelector('[aria-label$="logo"], img[alt$="logo"]');
-          if (logoEl) {
+          const items = document.querySelectorAll('[componentkey^="entity-collection-item"]');
+          const currentCompanies = Array.from(items)
+          .filter(item => {
+              const text = item.innerText.toLowerCase();
+              return text.includes('present') || text.includes('hiện tại');
+          })
+          .map(item => {
+              const logoEl = item.querySelector('[aria-label$="logo"], img[alt$="logo"]');
+              if (logoEl) {
               const labelText = logoEl.getAttribute('aria-label') || logoEl.getAttribute('alt');
               if (labelText) {
                   return labelText.replace(/\s+logo$/i, '').trim();
               }
-          }
-          const pTags = Array.from(item.querySelectorAll('p'))
-                            .map(p => p.innerText.trim())
-                            .filter(t => t.length > 0);
-          if (pTags.length > 1) {
+              }
+              const pTags = Array.from(item.querySelectorAll('p'))
+                    .map(p => p.innerText.trim())
+                    .filter(t => t.length > 0);
+              if (pTags.length > 1) {
               return pTags[1].split(' · ')[0].trim();
-          }
-          return "";
-      })
-      .filter(name => name !== "");
-      
-  return {
-      name: name,
-      connections: connections,
-      company: currentCompanies
-  };
-""")
+              }
+              return "";
+          })
+          .filter(name => name !== "");
+          
+          return {
+          name: name,
+          connections: connections,
+          company: currentCompanies
+          };
+        """)
 
         name = data_js.get('name', '')
         
-        title_el = WebDriverWait(driver, 6).until(
-            EC.presence_of_element_located((By.XPATH, XPATH_TITLE))
-        )
-        title = title_el.text.strip()
         
         location_el = WebDriverWait(driver, 6).until(EC.presence_of_element_located((By.XPATH, XPATH_LOCATION)))
         location = location_el.text.strip()
-        
-        company = data_js.get('company', '')
+
+        company, title = call_gemini_with_image(image_path='screenshot_temp.png')
+        print(f"Thông tin công ty: {company}, Chức vụ: {title}")
+        #     title_el = WebDriverWait(driver, 6).until(
+        #     EC.presence_of_element_located((By.XPATH, XPATH_TITLE))
+        # )
+        #     title = title_el.text.strip()
+            # company = data_js.get('company', '')
+        if company == None or title == None:
+            print(f"--- Đang trích xuất theo logic Visual-Order (Fix N/A) ---")
+            tree = html.fromstring(driver.page_source)
+            current_companies_list = []
+            job_titles_list = []
+
+            # 1. Tìm tất cả các nhãn thời gian có chữ "Present" hoặc "Hiện tại"
+            # LinkedIn thường để thời gian trong các thẻ span hoặc p
+            time_labels = tree.xpath("//span[contains(., 'Present') or contains(., 'Hiện tại')] | //p[contains(., 'Present') or contains(., 'Hiện tại')]")
+            
+            processed_containers = set() # Tránh trùng lặp khi một block có nhiều thẻ span chứa chữ Present
+
+            for label in time_labels:
+                # 2. Từ nhãn thời gian, tìm ngược lên container chứa toàn bộ thông tin công việc đó
+                # Container này thường là thẻ <li> hoặc <div> có componentkey 'entity-collection-item'
+                container = label.xpath("./ancestor::li[contains(@class, 'artdeco-list__item')] | ./ancestor::div[contains(@componentkey, 'entity-collection-item')]")
+                
+                if container:
+                    cont = container[0]
+                    # Nếu container này đã được xử lý (tránh trùng), bỏ qua
+                    if cont in processed_containers: continue
+                    processed_containers.add(cont)
+
+                    # 3. Lấy tất cả các đoạn text hiển thị sạch (thường nằm trong thẻ span có aria-hidden)
+                    # Đây là cách lấy text an toàn nhất không phụ thuộc vào class name
+                    all_spans = cont.xpath(".//span[@aria-hidden='true']/text() | .//p/text()")
+                    clean_info = [s.strip() for s in all_spans if s.strip() and len(s.strip()) > 1]
+                    
+                    # 4. Phân loại Grouped Role vs Single Role
+                    # Kiểm tra xem container này có phải là 'con' của một danh sách công việc cùng công ty không
+                    parent_li = cont.xpath("./ancestor::li[contains(@class, 'artdeco-list__item')]")
+                    
+                    if parent_li: # TRƯỜNG HỢP: Nhiều vị trí tại 1 công ty (Grouped)
+                        # Tên công ty nằm ở thẻ <a> đầu tiên của khối cha (không phải của item con)
+                        p_comp = parent_li[0].xpath(".//a[1]//span[@aria-hidden='true']/text()")
+                        c_name = p_comp[0].strip() if p_comp else "N/A"
+                        # Title là dòng text đầu tiên trong item con này
+                        t_name = clean_info[0] if clean_info else "N/A"
+                    else: 
+                        # TRƯỜNG HỢP: 1 vị trí/1 công ty (Single)
+                        # clean_info[0] là Title, clean_info[1] là Company
+                        t_name = clean_info[0] if len(clean_info) > 0 else "N/A"
+                        c_name = clean_info[1].split('·')[0].strip() if len(clean_info) > 1 else "N/A"
+
+                    # 5. Lưu kết quả
+                    if c_name != "N/A" and t_name != "N/A":
+                        if c_name not in current_companies_list:
+                            current_companies_list.append(c_name)
+                        job_titles_list.append(f"{t_name} from {c_name}")
+
+            # Format đầu ra theo đúng yêu cầu
+            company = ", ".join(current_companies_list)
+            title = ", ".join(job_titles_list) if job_titles_list else "N/A - lỗi"
+            
+            print(f"✅ Kết quả: Companies [{company}] | Titles [{title}]")
+            
         conn_source = data_js.get('connections', '').strip()
         parts = conn_source.split()
         clean_connection = " ".join([p for p in parts if p != '·'])
@@ -530,7 +689,7 @@ def crawl_profile(driver, raw_url):
         return None, str(e)
 # --- 5. MAIN ---
 def main():
-    MAX_PROFILE = 20
+    MAX_PROFILE = 2
     count = 0
     sh = connect_google_sheet()
     if not sh: return
@@ -571,10 +730,10 @@ def main():
             #     driver.save_screenshot(screenshot_name)
             # except Exception:
             #     pass
-                data_company_list = [str(i) for i in data['Company']]
-                data_company_str = ', '.join(data_company_list)
+                # data_company_list = [str(i) for i in data['Company']]
+                # data_company_str = ', '.join(data_company_list)
                 ws.update(range_name=f"B{i+1}:F{i+1}", values=[[
-                    data['Name'], data['Title'], data['Location'], f"{data['Connection']}", data_company_str
+                    data['Name'], data['Title'], data['Location'], f"{data['Connection']}", f"{data['Company']}"
                 ]])
             except Exception as e:
                 print(f"  ⚠️ Lỗi cập nhật Sheet cho {url}: {str(e)}")  

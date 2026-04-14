@@ -6,5 +6,5 @@ google-auth-httplib2
 google-auth-oauthlib
 gspread
 google-generativeai
-re
-PIL
+lxml
+Pillow

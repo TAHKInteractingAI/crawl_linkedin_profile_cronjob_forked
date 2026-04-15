@@ -73,10 +73,14 @@ ACCOUNTS = [
         "cookie_filename": "cookies_acc2.pkl"
     }
 ]
-XPATH_USERNAME = '//*[@id="username"]'# | //input[@id=":r3:"] | //input[contains(@id, "r")] | //input[@autocomplete="username" or @autocomplete="webauthn"]'
-XPATH_PASSWORD = '//*[@id="password"]'# | //input[@id=":r4:"] | //input[contains(@id, "r")] | //input[@autocomplete="current-password"]'
-XPATH_LOGIN_BUTTON = '//button[contains(@class, "btn__primary--large") and @aria-label="Sign in"]'# | //button[.//text()[contains(., "Sign in") or contains(., "Log in") or contains(., "Đăng nhập")]]'
 
+XPATH_USERNAME = '//*[@id="username"] | //input[@id=":r3:"]'
+XPATH_PASSWORD = '//*[@id="password"] | //input[@id=":r4:"]'
+XPATH_LOGIN_BUTTON = '//button[contains(@class, "btn__primary--large") and @aria-label="Sign in"] | /html/body/div[1]/div[2]/div/div/div/main/div/div[2]/div/div[1]/div/div/div[2]/div/div/div/div[2]/div/div[3]/button'# //button[contains(., "Sign in") and not(contains(., "Google")) and not(contains(., "Apple"))]'
+
+TITLE_XPATH = '/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[1]/div/section/div/div/div[2]/div[1]/div[1]/div/p[1]'
+COMPANY_XPATH = '/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[1]/div/section/div/div/div[2]/div[1]/div[2]/div/div/div/div/div/div/p'
+EXPERIENCE_CARD_XPATH = "/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[5]/div/div[1]/div/section/div/div[2]/div[1]/h2"
 XPATH_LOCATION = '/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[1]/div/section/div/div/div[2]/div[1]/div[1]/div/div[2]/p[1]'
 XPATH_TITLE = '/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[1]/div/section/div/div/div[2]/div[1]/div[1]/div/p[1]'
 # --- 1. SETUP DRIVER ---
@@ -400,132 +404,6 @@ def call_gemini_with_image(image_path) -> list:
     print("🛑 Tất cả model đều thất bại hoặc hết quota. Chuyển sang XPATH...")
     return None, None
 
-# --- 4. CRAWL PROFILE (HÀM FIX TRIỆT ĐỂ) ---
-# def crawl_profile(driver, raw_url):
-#     try:
-#         url = raw_url.strip()
-#         driver.get(url)
-
-#         print(f"--- Processing: {url}")
-#         time.sleep(random.uniform(5, 10))
-
-#         # Cuộn trang nhiều lần để kích hoạt dữ liệu ẩn
-#         for _ in range(3):
-#             driver.execute_script("window.scrollBy(0, 300);")
-#             time.sleep(1)
-
-#         if any(x in driver.current_url for x in ["login", "authwall", "checkpoint", "challenge"]):
-#             print("Debug: Auth wall detected.")
-#             # Chụp screenshot
-#             filename = f"authwall_{int(time.time())}.png"
-#             driver.save_screenshot(filename)
-#             print(f"Screenshot saved: {filename}")
-#             return None, "AUTH_WALL"
-
-#         data_js = driver.execute_script("""
-#     const getTxt = (el) => el ? el.innerText.trim() : "";
-
-#     // 1. Tìm Tên (Name): 
-#     const getElementByTextLength = (selector, maxLength) => {
-#     return [...document.querySelectorAll(selector)]
-#         .find(el => (el.innerText?.trim().length || 0) <= maxLength);
-#     };
-#     const nameElement = getElementByTextLength('a:has(h2)', 20) || getElementByTextLength('a:has(h1)', 20);
-#     const name = getTxt(nameElement);
-
-#     // 2. Tìm Title/Headline: 
-
-#     // 3. Tìm Địa điểm (Location): 
-#     // Tìm thẻ <p> có chứa dấu phẩy (thành phố, quốc gia) và không chứa các từ khóa như 'follower' hay 'connection'.
-
-#     // 4. Tìm số Connections:
-#     const keywords = ['connections', 'followers'];
-#     const connections = [...document.querySelectorAll('p')]
-#   .find(p => /connections|followers/i.test(p.innerText))
-#   ?.closest('div')?.innerText;
-
-#     // 5. Tìm Công ty (Experience):
-#   const items = document.querySelectorAll('[componentkey^="entity-collection-item"]');
-
-#   const currentCompanies = Array.from(items)
-#       .filter(item => {
-#           const text = item.innerText.toLowerCase();
-#           // Lọc các item đang làm việc hiện tại
-#           return text.includes('present') || text.includes('hiện tại');
-#       })
-#       .map(item => {
-#           // Cách 1: Ưu tiên lấy qua alt/aria-label của Logo (Chính xác 99%)
-#           const logoEl = item.querySelector('[aria-label$="logo"], img[alt$="logo"]');
-#           if (logoEl) {
-#               const labelText = logoEl.getAttribute('aria-label') || logoEl.getAttribute('alt');
-#               if (labelText) {
-#                   // Thay thế chữ " logo" ở cuối (bỏ qua hoa/thường) bằng chuỗi rỗng
-#                   return labelText.replace(/\s+logo$/i, '').trim();
-#               }
-#           }
-
-#           // Cách 2: Fallback (dự phòng) phòng trường hợp layout bị thay đổi dị thường
-#           // Lấy tất cả thẻ <p>, thường thì <p> thứ 1 là Title, <p> thứ 2 là Tên công ty
-#           const pTags = Array.from(item.querySelectorAll('p'))
-#                             .map(p => p.innerText.trim())
-#                             .filter(t => t.length > 0);
-          
-#           if (pTags.length > 1) {
-#               // Lấy thẻ <p> thứ 2 và cắt phần ' · ' nếu có
-#               return pTags[1].split(' · ')[0].trim();
-#           }
-
-#           return "";
-#       })
-#       .filter(name => name !== "");
-      
-#   return {
-#       name: name,
-#       //title: title,
-#       //location: location,
-#       connections: connections,
-#       company: currentCompanies
-#   };
-# """)
-
-#         name = data_js.get('name', '')
-#         #title = data_js.get('title', '')
-#         title_el = WebDriverWait(driver, 6).until(
-#             EC.presence_of_element_located((By.XPATH, XPATH_TITLE))
-#         )
-#         title = title_el.text.strip()
-#         #location = data_js.get('location', '')
-#         location_el = WebDriverWait(driver, 6).until(EC.presence_of_element_located((By.XPATH, XPATH_LOCATION)))
-#         location = location_el.text.strip()
-#         company = data_js.get('company', '')
-#         conn_source = data_js.get('connections', '').strip()
-#         parts = conn_source.split()
-#         clean_connection = " ".join([p for p in parts if p != '·'])
-        
-#         # # Fallback: Nếu vẫn trống công ty, thử lấy từ Title (thường sau dấu "at")
-#         # if not company and " at " in title:
-#         #     company = title.split(" at ")[-1].split("|")[0].strip()
-
-#         print(f"Debug: Extracted name: {name}")
-#         print(f"Debug: Extracted company: {company}")
-#         print(f"Debug: Extracted location: {location}")
-#         print(f"Debug: Extracted title: {title}")
-#         print(f"Debug: Extracted connections: {clean_connection}")
-
-#         # connection = ""
-#         # match = re.search(r'([\d,\.\+]+)\s*(connections|kết nối|followers|người theo dõi)', clean_connection, re.I)
-#         # if match:
-#         #     connection = match.group(0)
-
-#         #print(f"Debug: Stats - Title: {len(title)} chars, Loc: {len(location)} chars, Comp: {len(company)} chars")
-
-#         return {
-#             "Name": name, "Title": title, "Location": location, "Connection": clean_connection, "Company": company
-#         }, "Success"
-
-#     except Exception as e:
-#         print(f"Debug: Error at {url} - {str(e)}")
-#         return None, str(e)
 # --- 4. CRAWL PROFILE ---
 def scroll_linkedin(driver, pixels):
     # Script này tìm khung cuộn của LinkedIn và kéo xuống
@@ -544,12 +422,9 @@ def crawl_profile(driver, raw_url):
         time.sleep(random.uniform(8, 12))
 
         # Cuộn trang nhiều lần để kích hoạt dữ liệu ẩn
-        scroll_linkedin(driver, 1180)
-        # action = ActionChains(driver)
-        # action.move_by_offset(500, 500).click().perform()
-        # for i in range(2):
-        #     action.send_keys(Keys.PAGE_DOWN).perform()
-        #     time.sleep(0.5)
+        #scroll_linkedin(driver, 1400)
+        element = driver.find_element("xpath", EXPERIENCE_CARD_XPATH)
+        driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
         time.sleep(2)
         driver.save_screenshot(f"screenshot_temp.png")
 
@@ -669,13 +544,21 @@ def crawl_profile(driver, raw_url):
                         if c_name not in current_companies_list:
                             current_companies_list.append(c_name)
                         job_titles_list.append(f"{t_name} from {c_name}")
-
+                        
             # Format đầu ra theo đúng yêu cầu
-            company = ", ".join(current_companies_list)
+            company = ", ".join(current_companies_list) if current_companies_list else "N/A - lỗi"
             title = ", ".join(job_titles_list) if job_titles_list else "N/A - lỗi"
-            
+
+            if title == "N/A - lỗi":
+                print("Không tìm thấy tiêu đề")
+                title_xpath = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, TITLE_XPATH)))
+                title = title_xpath.text.strip() if title_xpath else "No Title"
+            if company == "":
+                print("Không tìm thấy công ty")
+                company_xpath = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, COMPANY_XPATH)))
+                company = company_xpath.text.strip() if company_xpath else "No Company"
             print(f"✅ Kết quả: Companies [{company}] | Titles [{title}]")
-            
+
         conn_source = data_js.get('connections', '').strip()
         parts = conn_source.split()
         clean_connection = " ".join([p for p in parts if p != '·'])

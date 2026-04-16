@@ -80,7 +80,7 @@ XPATH_LOGIN_BUTTON = '//button[contains(@class, "btn__primary--large") and @aria
 
 TITLE_XPATH = '/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[1]/div/section/div/div/div[2]/div[1]/div[1]/div/p[1]'
 COMPANY_XPATH = '/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[1]/div/section/div/div/div[2]/div[1]/div[2]/div/div/div/div/div/div/p'
-EXPERIENCE_CARD_XPATH = "/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[5]/div/div[1]/div/section/div/div[2]/div[1]/h2"
+EXPERIENCE_CARD_XPATH = "/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[6]/div/div/div[1]/div/section/div/div[2]/div[1]/h2 | /html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[5]/div/div[1]/div/section/div/div[2]/div[1]/h2"
 XPATH_LOCATION = '/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[1]/div/section/div/div/div[2]/div[1]/div[1]/div/div[2]/p[1]'
 XPATH_TITLE = '/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[1]/div/section/div/div/div[2]/div[1]/div[1]/div/p[1]'
 # --- 1. SETUP DRIVER ---
@@ -376,7 +376,7 @@ def login_failover(driver: webdriver.Chrome):
 AVAILABLE_MODELS = ['gemini-3-flash-preview','gemini-3.1-flash-lite-preview', 'gemini-2.5-flash-lite']
 def call_gemini_with_image(image_path) -> list:
     img = PIL.Image.open(image_path)
-    genai.configure(api_key=GEMINI_API_KEY)
+    #genai.configure(api_key=GEMINI_API_KEY)
     for model_name in AVAILABLE_MODELS:
         try:
             print(f"--- Đang thử model: {model_name} ---")
@@ -395,10 +395,10 @@ def call_gemini_with_image(image_path) -> list:
             return coms, poss
 
         except google_exceptions.ResourceExhausted:
-            print(f"⚠️ Model {model_name} đã hết quota (Reached Quota).")
+            #print(f"⚠️ Model {model_name} đã hết quota (Reached Quota).")
             continue 
         except Exception as e:
-            print(f"❌ Lỗi với {model_name}: {str(e)}")
+            #print(f"❌ Lỗi với {model_name}: {str(e)}")
             continue
 
     print("🛑 Tất cả model đều thất bại hoặc hết quota. Chuyển sang XPATH...")
@@ -412,6 +412,26 @@ def scroll_linkedin(driver, pixels):
         container.scrollBy(0, {pixels});
     """
     driver.execute_script(scroll_script)
+    
+def scroll_linkedin_XPATH(driver):
+    # Sử dụng XPath dựa trên cấu trúc trong file của bạn
+    # Tìm thẻ h2 chứa chữ "Experience" 
+    
+    try:
+        # Tìm element trước trong Python
+        element = driver.find_element("xpath", EXPERIENCE_CARD_XPATH)
+        
+        # Truyền element vào script thông qua tham số arguments[0]
+        driver.execute_script("""
+            arguments[0].scrollIntoView({
+                behavior: 'smooth', 
+                block: 'center'
+            });
+        """, element)
+        print("Đã scroll đến phần Experience thành công.")
+    except Exception as e:
+        print(f"Không tìm thấy phần Experience để scroll: {e}")
+        
 def crawl_profile(driver, raw_url):
     try:
         url = raw_url.strip()
@@ -420,11 +440,9 @@ def crawl_profile(driver, raw_url):
         print(f"--- Processing: {url}")
         # Chờ trang tải nội dung cơ bản (chỉ 8-12s)
         time.sleep(random.uniform(8, 12))
-
-        # Cuộn trang nhiều lần để kích hoạt dữ liệu ẩn
-        #scroll_linkedin(driver, 1400)
-        element = driver.find_element("xpath", EXPERIENCE_CARD_XPATH)
-        driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
+        
+        scroll_linkedin_XPATH(driver)
+        
         time.sleep(2)
         driver.save_screenshot(f"screenshot_temp.png")
 
@@ -496,65 +514,52 @@ def crawl_profile(driver, raw_url):
         #     title = title_el.text.strip()
             # company = data_js.get('company', '')
         if company == None or title == None:
-            print(f"--- Đang trích xuất theo logic Visual-Order (Fix N/A) ---")
+            print(f"--- Đang trích xuất theo logic Visual-Order ---")
             tree = html.fromstring(driver.page_source)
             current_companies_list = []
             job_titles_list = []
 
-            # 1. Tìm tất cả các nhãn thời gian có chữ "Present" hoặc "Hiện tại"
-            # LinkedIn thường để thời gian trong các thẻ span hoặc p
             time_labels = tree.xpath("//span[contains(., 'Present') or contains(., 'Hiện tại')] | //p[contains(., 'Present') or contains(., 'Hiện tại')]")
             
-            processed_containers = set() # Tránh trùng lặp khi một block có nhiều thẻ span chứa chữ Present
+            processed_containers = set()
 
             for label in time_labels:
-                # 2. Từ nhãn thời gian, tìm ngược lên container chứa toàn bộ thông tin công việc đó
-                # Container này thường là thẻ <li> hoặc <div> có componentkey 'entity-collection-item'
+               
                 container = label.xpath("./ancestor::li[contains(@class, 'artdeco-list__item')] | ./ancestor::div[contains(@componentkey, 'entity-collection-item')]")
                 
                 if container:
                     cont = container[0]
-                    # Nếu container này đã được xử lý (tránh trùng), bỏ qua
                     if cont in processed_containers: continue
                     processed_containers.add(cont)
 
-                    # 3. Lấy tất cả các đoạn text hiển thị sạch (thường nằm trong thẻ span có aria-hidden)
-                    # Đây là cách lấy text an toàn nhất không phụ thuộc vào class name
                     all_spans = cont.xpath(".//span[@aria-hidden='true']/text() | .//p/text()")
                     clean_info = [s.strip() for s in all_spans if s.strip() and len(s.strip()) > 1]
-                    
-                    # 4. Phân loại Grouped Role vs Single Role
-                    # Kiểm tra xem container này có phải là 'con' của một danh sách công việc cùng công ty không
+
                     parent_li = cont.xpath("./ancestor::li[contains(@class, 'artdeco-list__item')]")
                     
-                    if parent_li: # TRƯỜNG HỢP: Nhiều vị trí tại 1 công ty (Grouped)
-                        # Tên công ty nằm ở thẻ <a> đầu tiên của khối cha (không phải của item con)
+                    if parent_li: 
                         p_comp = parent_li[0].xpath(".//a[1]//span[@aria-hidden='true']/text()")
-                        c_name = p_comp[0].strip() if p_comp else "N/A"
-                        # Title là dòng text đầu tiên trong item con này
-                        t_name = clean_info[0] if clean_info else "N/A"
+                        c_name = p_comp[0].strip() if p_comp else ""
+                        t_name = clean_info[0] if clean_info else ""
                     else: 
-                        # TRƯỜNG HỢP: 1 vị trí/1 công ty (Single)
-                        # clean_info[0] là Title, clean_info[1] là Company
-                        t_name = clean_info[0] if len(clean_info) > 0 else "N/A"
-                        c_name = clean_info[1].split('·')[0].strip() if len(clean_info) > 1 else "N/A"
 
-                    # 5. Lưu kết quả
-                    if c_name != "N/A" and t_name != "N/A":
+                        t_name = clean_info[0] if len(clean_info) > 0 else ""
+                        c_name = clean_info[1].split('·')[0].strip() if len(clean_info) > 1 else ""
+
+                    if c_name != "" and t_name != "":
                         if c_name not in current_companies_list:
                             current_companies_list.append(c_name)
                         job_titles_list.append(f"{t_name} from {c_name}")
                         
-            # Format đầu ra theo đúng yêu cầu
-            company = ", ".join(current_companies_list) if current_companies_list else "N/A - lỗi"
-            title = ", ".join(job_titles_list) if job_titles_list else "N/A - lỗi"
+            company = ", ".join(current_companies_list) if current_companies_list else ""
+            title = ", ".join(job_titles_list) if job_titles_list else ""
 
-            if title == "N/A - lỗi":
-                print("Không tìm thấy tiêu đề")
+            if title == "":
+                print("Không tìm thấy tiêu đề, sử dụng XPATH")
                 title_xpath = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, TITLE_XPATH)))
                 title = title_xpath.text.strip() if title_xpath else "No Title"
             if company == "":
-                print("Không tìm thấy công ty")
+                print("Không tìm thấy công ty, sử dụng XPATH")
                 company_xpath = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, COMPANY_XPATH)))
                 company = company_xpath.text.strip() if company_xpath else "No Company"
             print(f"✅ Kết quả: Companies [{company}] | Titles [{title}]")
@@ -562,6 +567,17 @@ def crawl_profile(driver, raw_url):
         conn_source = data_js.get('connections', '').strip()
         parts = conn_source.split()
         clean_connection = " ".join([p for p in parts if p != '·'])
+        
+        print(f"""
+              =================
+              Đã cào: {url}
+              Tên: {name}
+              Tiêu đề: {title}
+              Địa điểm: {location}
+              Kết nối: {clean_connection}
+              Công ty: {company}
+              =================
+              """)
 
         return {
             "Name": name, "Title": title, "Location": location, "Connection": clean_connection, "Company": company
@@ -607,14 +623,6 @@ def main():
         if status == "Success" and data and data['Name']:
             print(f"   ✅ OK")
             try:
-            # try:
-            #     safe_name = ''.join(c for c in data['Name'] if c.isalnum() or c in (' ','.','_')).rstrip()
-            #     screenshot_name = f"profile_{i+1}_{safe_name}.png"
-            #     driver.save_screenshot(screenshot_name)
-            # except Exception:
-            #     pass
-                # data_company_list = [str(i) for i in data['Company']]
-                # data_company_str = ', '.join(data_company_list)
                 ws.update(range_name=f"B{i+1}:F{i+1}", values=[[
                     data['Name'], data['Title'], data['Location'], f"{data['Connection']}", f"{data['Company']}"
                 ]])

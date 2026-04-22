@@ -7,7 +7,7 @@ on:
 jobs:
   automation:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     # Thêm quyền cho GITHUB_TOKEN để có thể xóa cache
     permissions:
       actions: write

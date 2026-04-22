@@ -80,6 +80,7 @@ XPATH_LOGIN_BUTTON = '//button[contains(@class, "btn__primary--large") and @aria
 
 TITLE_XPATH = '/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[1]/div/section/div/div/div[2]/div[1]/div[1]/div/p[1]'
 COMPANY_XPATH = '/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[1]/div/section/div/div/div[2]/div[1]/div[2]/div/div/div/div/div/div/p'
+
 EXPERIENCE_CARD_XPATH = "/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[6]/div/div/div[1]/div/section/div/div[2]/div[1]/h2 | /html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[5]/div/div[1]/div/section/div/div[2]/div[1]/h2"
 XPATH_LOCATION = '/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[1]/div/section/div/div/div[2]/div[1]/div[1]/div/div[2]/p[1]'
 XPATH_TITLE = '/html/body/div/div[2]/div[2]/div[2]/div/main/div/div/div[1]/div/div/div[1]/div/section/div/div/div[2]/div[1]/div[1]/div/p[1]'
@@ -376,12 +377,12 @@ def login_failover(driver: webdriver.Chrome):
 AVAILABLE_MODELS = ['gemini-3-flash-preview','gemini-3.1-flash-lite-preview', 'gemini-2.5-flash-lite']
 def call_gemini_with_image(image_path) -> list:
     img = PIL.Image.open(image_path)
-    #genai.configure(api_key=GEMINI_API_KEY)
+    genai.configure(api_key=GEMINI_API_KEY)
     for model_name in AVAILABLE_MODELS:
         try:
-            print(f"--- Đang thử model: {model_name} ---")
+            #print(f"--- Đang thử model: {model_name} ---")
             model = genai.GenerativeModel(model_name)
-            print(f"--- Đang sử dụng model: {model_name} ---, --- Keys: {GEMINI_API_KEY}")
+            #print(f"--- Đang sử dụng model: {model_name} ---, --- Keys: {GEMINI_API_KEY}")
             response = model.generate_content([GEMINI_PROMPT, img]).text
             
             # Xử lý chuỗi trả về
@@ -391,7 +392,7 @@ def call_gemini_with_image(image_path) -> list:
             coms = parts[0].strip(' []').replace("'", "").replace('"', '')
             poss = parts[1].strip(' []').replace("'", "").replace('"', '')
             
-            print(f"✅ Thành công với {model_name}. Công ty: {coms}, Vị trí: {poss}")
+            #print(f"✅ Thành công với {model_name}. Công ty: {coms}, Vị trí: {poss}")
             return coms, poss
 
         except google_exceptions.ResourceExhausted:
@@ -414,14 +415,9 @@ def scroll_linkedin(driver, pixels):
     driver.execute_script(scroll_script)
     
 def scroll_linkedin_XPATH(driver):
-    # Sử dụng XPath dựa trên cấu trúc trong file của bạn
-    # Tìm thẻ h2 chứa chữ "Experience" 
-    
     try:
-        # Tìm element trước trong Python
         element = driver.find_element("xpath", EXPERIENCE_CARD_XPATH)
         
-        # Truyền element vào script thông qua tham số arguments[0]
         driver.execute_script("""
             arguments[0].scrollIntoView({
                 behavior: 'smooth', 
@@ -440,10 +436,12 @@ def crawl_profile(driver, raw_url):
         print(f"--- Processing: {url}")
         # Chờ trang tải nội dung cơ bản (chỉ 8-12s)
         time.sleep(random.uniform(8, 12))
-        
+        for _ in range(3):
+            scroll_linkedin(driver, 500)
+            time.sleep(random.uniform(1, 2))
         scroll_linkedin_XPATH(driver)
         
-        time.sleep(2)
+        time.sleep(3)
         driver.save_screenshot(f"screenshot_temp.png")
 
         if any(x in driver.current_url for x in ["login", "authwall", "checkpoint", "challenge"]):
@@ -514,55 +512,108 @@ def crawl_profile(driver, raw_url):
         #     title = title_el.text.strip()
             # company = data_js.get('company', '')
         if company == None or title == None:
-            print(f"--- Đang trích xuất theo logic Visual-Order ---")
-            tree = html.fromstring(driver.page_source)
-            current_companies_list = []
-            job_titles_list = []
-
-            time_labels = tree.xpath("//span[contains(., 'Present') or contains(., 'Hiện tại')] | //p[contains(., 'Present') or contains(., 'Hiện tại')]")
-            
-            processed_containers = set()
-
-            for label in time_labels:
-               
-                container = label.xpath("./ancestor::li[contains(@class, 'artdeco-list__item')] | ./ancestor::div[contains(@componentkey, 'entity-collection-item')]")
-                
-                if container:
-                    cont = container[0]
-                    if cont in processed_containers: continue
-                    processed_containers.add(cont)
-
-                    all_spans = cont.xpath(".//span[@aria-hidden='true']/text() | .//p/text()")
-                    clean_info = [s.strip() for s in all_spans if s.strip() and len(s.strip()) > 1]
-
-                    parent_li = cont.xpath("./ancestor::li[contains(@class, 'artdeco-list__item')]")
+            try:
+                driver.get("https://www.linkedin.com/in/pauljshort")
+                time.sleep(5)
+                for _ in range(3):
+                    scroll_linkedin(driver, 1000)
+                    time.sleep(1)
                     
-                    if parent_li: 
-                        p_comp = parent_li[0].xpath(".//a[1]//span[@aria-hidden='true']/text()")
-                        c_name = p_comp[0].strip() if p_comp else ""
-                        t_name = clean_info[0] if clean_info else ""
-                    else: 
+                experience_xpath = (
+                    "//section[contains(@componentkey, 'ExperienceTopLevelSection')] | "
+                    "//section[.//h2[text()='Experience' or text()='Kinh nghiệm']]"
+                )
+                experience_section = WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located((By.XPATH, experience_xpath))
+                )
 
-                        t_name = clean_info[0] if len(clean_info) > 0 else ""
-                        c_name = clean_info[1].split('·')[0].strip() if len(clean_info) > 1 else ""
+                entries = experience_section.find_elements(By.XPATH, ".//div[contains(@componentkey, 'entity-collection-item')]")
+                
+                current_companies_list = []
+                job_titles_list = []
 
-                    if c_name != "" and t_name != "":
-                        if c_name not in current_companies_list:
-                            current_companies_list.append(c_name)
-                        job_titles_list.append(f"{t_name} from {c_name}")
+                for entry in entries:
+                    text_content = entry.text
+                    # Lọc các khối có thời gian làm việc đến hiện tại
+                    if not any(kw in text_content for kw in ["Present", "Hiện tại", "Hien tai"]):
+                        continue
+
+                    sub_roles = entry.find_elements(By.XPATH, ".//ul/li")
+                    lines = [l.strip() for l in text_content.split('\n') if l.strip()]
+                    
+                    if sub_roles:
+                        # Trường hợp công ty có nhiều vị trí (Grouped Roles)
+                        company_name = lines[0]
+                        for role_li in sub_roles:
+                            if any(kw in role_li.text for kw in ["Present", "Hiện tại", "Hien tai"]):
+                                role_title = role_li.text.split('\n')[0]
+                                job_titles_list.append(f"{role_title} from {company_name}")
+                                if company_name not in current_companies_list:
+                                    current_companies_list.append(company_name)
+                    else:
+                        # Trường hợp công việc đơn lẻ (Single Role)
+                        if len(lines) >= 2:
+                            role_title = lines[0]
+                            company_name = lines[1].split(' · ')[0]
+                            job_titles_list.append(f"{role_title} from {company_name}")
+                            if company_name not in current_companies_list:
+                                current_companies_list.append(company_name)
+
+                company_str = ", ".join(current_companies_list)
+                title_str = ", ".join(job_titles_list)
+                print(f"company: {company_str}, position: {title_str}")
+
+            except Exception as e:
+                print(f"❌ Lỗi: {e}")
+            # print(f"--- Đang trích xuất theo logic Visual-Order ---")
+            # tree = html.fromstring(driver.page_source)
+            # current_companies_list = []
+            # job_titles_list = []
+
+            # time_labels = tree.xpath("//span[contains(., 'Present') or contains(., 'Hiện tại')] | //p[contains(., 'Present') or contains(., 'Hiện tại')]")
+            
+            # processed_containers = set()
+
+            # for label in time_labels:
+               
+            #     container = label.xpath("./ancestor::li[contains(@class, 'artdeco-list__item')] | ./ancestor::div[contains(@componentkey, 'entity-collection-item')]")
+                
+            #     if container:
+            #         cont = container[0]
+            #         if cont in processed_containers: continue
+            #         processed_containers.add(cont)
+
+            #         all_spans = cont.xpath(".//span[@aria-hidden='true']/text() | .//p/text()")
+            #         clean_info = [s.strip() for s in all_spans if s.strip() and len(s.strip()) > 1]
+
+            #         parent_li = cont.xpath("./ancestor::li[contains(@class, 'artdeco-list__item')]")
+                    
+            #         if parent_li: 
+            #             p_comp = parent_li[0].xpath(".//a[1]//span[@aria-hidden='true']/text()")
+            #             c_name = p_comp[0].strip() if p_comp else ""
+            #             t_name = clean_info[0] if clean_info else ""
+            #         else: 
+
+            #             t_name = clean_info[0] if len(clean_info) > 0 else ""
+            #             c_name = clean_info[1].split('·')[0].strip() if len(clean_info) > 1 else ""
+
+            #         if c_name != "" and t_name != "":
+            #             if c_name not in current_companies_list:
+            #                 current_companies_list.append(c_name)
+            #             job_titles_list.append(f"{t_name} from {c_name}")
                         
-            company = ", ".join(current_companies_list) if current_companies_list else ""
-            title = ", ".join(job_titles_list) if job_titles_list else ""
-
-            if title == "":
-                print("Không tìm thấy tiêu đề, sử dụng XPATH")
-                title_xpath = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, TITLE_XPATH)))
-                title = title_xpath.text.strip() if title_xpath else "No Title"
-            if company == "":
-                print("Không tìm thấy công ty, sử dụng XPATH")
-                company_xpath = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, COMPANY_XPATH)))
-                company = company_xpath.text.strip() if company_xpath else "No Company"
-            print(f"✅ Kết quả: Companies [{company}] | Titles [{title}]")
+            # company = ", ".join(current_companies_list) if current_companies_list else ""
+            # title = ", ".join(job_titles_list) if job_titles_list else ""
+            # print(f"✅ Kết quả cho XPATH đầu: Companies [{company}] | Titles [{title}]")
+            # if title == "":
+            #     print("Không tìm thấy tiêu đề, sử dụng XPATH")
+            #     title_xpath = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, TITLE_XPATH)))
+            #     title = title_xpath.text.strip() if title_xpath else "No Title"
+            # if company == "":
+            #     print("Không tìm thấy công ty, sử dụng XPATH")
+            #     company_xpath = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, COMPANY_XPATH)))
+            #     company = company_xpath.text.strip() if company_xpath else "No Company"
+            # print(f"✅ Kết quả: Companies [{company}] | Titles [{title}]")
 
         conn_source = data_js.get('connections', '').strip()
         parts = conn_source.split()
@@ -588,7 +639,8 @@ def crawl_profile(driver, raw_url):
         return None, str(e)
 # --- 5. MAIN ---
 def main():
-    MAX_PROFILE = 2
+    #while True:
+    MAX_PROFILE = 20
     count = 0
     sh = connect_google_sheet()
     if not sh: return
@@ -604,6 +656,7 @@ def main():
     driver = get_driver()
     if not login_failover(driver):  return
 
+    #has_processed = False
     for i in range(1, len(urls)):
         url = urls[i]
         if "linkedin.com/in/" not in url: continue
@@ -641,13 +694,21 @@ def main():
                 break
 
         count +=1
+        #has_processed = True
+        
         if count >= MAX_PROFILE:
-            print("reached max limit")
+            print(f"🎯 Đã xong {MAX_PROFILE} profiles. Chuẩn bị nghỉ ngơi...")
             break
-
-        time.sleep(random.randint(40, 80))
-
+            
     driver.quit()
+
+    # if not has_processed:
+    #     print("✅ Không còn profile nào cần crawl. Kết thúc chương trình.")
+    #     break
+    # # time.sleep(random.randint(40, 80))
+    # print("😴 Đang chờ 30 phút (1800s) trước khi tiếp tục đợt tiếp theo...")
+    # time.sleep(1800)
+
     
 if __name__ == "__main__":
     main()

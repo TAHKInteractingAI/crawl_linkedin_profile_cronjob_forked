@@ -8,3 +8,4 @@ gspread
 google-generativeai
 lxml
 Pillow
+undetected-chromedriver
